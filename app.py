@@ -1,55 +1,72 @@
+"""
+Streamlit UI for the Email/SMS Spam Detection system.
+
+Usage:
+    streamlit run app.py
+"""
+
 import streamlit as st
-import pickle
-import string
-from nltk.corpus import stopwords
-import nltk
-nltk.download('punkt')
-from nltk.stem.porter import PorterStemmer
 
-ps = PorterStemmer()
+# ---------- Page configuration ----------
+st.set_page_config(
+    page_title="Email / SMS Spam Detector",
+    page_icon="📧",
+    layout="centered",
+)
 
+# ---------- Lazy-import predict (loads model once) ----------
+from predict import predict  # noqa: E402  – imported after set_page_config
 
-def transform_text(text):
-    text = text.lower()
-    text = nltk.word_tokenize(text)
+# ---------- Sidebar ----------
+with st.sidebar:
+    st.title("ℹ️ About")
+    st.markdown(
+        """
+        This application uses a **Machine-Learning** model to classify
+        email or SMS messages as **Spam** or **Ham** (not spam).
 
-    y = []
-    for i in text:
-        if i.isalnum():
-            y.append(i)
+        **Stack**: Streamlit · scikit-learn · NLTK
 
-    text = y[:]
-    y.clear()
+        **How it works**
+        1. Text is lowered, tokenised, cleaned of stop-words and stemmed.
+        2. A TF-IDF vectoriser converts it to features.
+        3. The trained classifier predicts the label with a confidence score.
+        """
+    )
+    st.divider()
+    st.caption("Built for production-readiness 🚀")
 
-    for i in text:
-        if i not in stopwords.words('english') and i not in string.punctuation:
-            y.append(i)
+# ---------- Main content ----------
+st.title("📧 Email / SMS Spam Detector")
+st.markdown("Enter an email or SMS message below and click **Predict** to check if it is spam.")
 
-    text = y[:]
-    y.clear()
+input_text = st.text_area(
+    "Message",
+    height=180,
+    placeholder="Type or paste the message here …",
+)
 
-    for i in text:
-        y.append(ps.stem(i))
-
-    return " ".join(y)
-
-tfidf = pickle.load(open('vectorizer.pkl','rb'))
-model = pickle.load(open('model.pkl','rb'))
-
-st.title("Email/SMS Spam Classifier")
-
-input_sms = st.text_area("Enter the message")
-
-if st.button('Predict'):
-
-    # 1. preprocess
-    transformed_sms = transform_text(input_sms)
-    # 2. vectorize
-    vector_input = tfidf.transform([transformed_sms])
-    # 3. predict
-    result = model.predict(vector_input)[0]
-    # 4. Display
-    if result == 1:
-        st.header("Spam")
+if st.button("🔍 Predict", use_container_width=True):
+    # ---- Input validation ----
+    if not input_text or not input_text.strip():
+        st.warning("⚠️ Please enter some text before predicting.")
     else:
-        st.header("Not Spam")
+        try:
+            result = predict(input_text)
+            label = result["label"]
+            confidence = result["confidence"]
+
+            # ---- Display result ----
+            if label == "spam":
+                st.error(f"🚨 **SPAM** detected!")
+            else:
+                st.success(f"✅ This message looks **safe** (Ham).")
+
+            # Confidence bar
+            st.markdown(f"**Confidence:** {confidence:.1%}")
+            st.progress(confidence)
+
+        except ValueError as exc:
+            st.warning(f"⚠️ {exc}")
+        except Exception as exc:
+            st.error(f"❌ An unexpected error occurred: {exc}")
